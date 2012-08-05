@@ -14,10 +14,7 @@ function love.load()
 	img_background 	= 	love.graphics.newImage("resources/images/background.png")
 	img_transparent 	= 	love.graphics.newImage("resources/images/transparent.png")
 	img_transparent_s 	= 	love.graphics.newImage("resources/images/transparent_s.png")
-	img_opacityslider 	= 	love.graphics.newImage("resources/images/bw_2.png")
-	img_frame_rgb 		=	love.graphics.newImage("resources/images/frame_rgb.png")
-	img_frame_lum	 	= 	love.graphics.newImage("resources/images/frame_lum.png")
-	img_frame_opa 		= 	love.graphics.newImage("resources/images/frame_opa.png")
+	img_frame_vert	 	= 	love.graphics.newImage("resources/images/frame_vert.png")
 	img_buttonarea 		= 	love.graphics.newImage("resources/images/buttonarea.png")
 	img_buttonarea2 	= 	love.graphics.newImage("resources/images/buttonarea_large.png")
 	img_button_200 		= 	love.graphics.newImage("resources/images/button_200.png")
@@ -55,9 +52,33 @@ function love.load()
 	currentFrame = 1
 
 	-- Set up the colour picking objects.
-	Colour = Picker(564, 109, "resources/images/rgb.png")
-	Lumosity = Lumo(836, 109, "resources/images/bw.png")
-	Opac = Opacity(564, 389)
+	Hue = Picker(564, 109, 22, 280, [[
+		vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
+		{
+			return(vec4(hsv(texture_coords.y, 1.0, 1.0), 1.0));
+		}]])
+	Sat = Picker(564+20+13, 109, 22, 280, [[
+		extern float hue;
+		vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
+		{
+			return(vec4(hsv(hue, 1.-texture_coords.y, 1.0), 1.0));
+		}]])
+	Val = Picker(564+20*2+13*2, 109, 22, 280, [[
+		extern float hue;
+		extern float sat;
+		vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
+		{
+			return(vec4(hsv(hue, sat, 1.-texture_coords.y), 1.0));
+		}]])
+	Alpha = Picker(564+20*3+13*3, 109, 22, 280, [[
+		extern float hue;
+		extern float sat;
+		extern float val;
+		extern float alpha;
+		vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
+		{
+			return(vec4(hsv(hue, sat, val), alpha));
+		}]])
 
 	-- Set up frame view object.
 	framev = Frameview(32, 32)
@@ -315,19 +336,21 @@ function love.update()
 
 	if page ~= "Import" then
 		-- Update each of the colour pallette objects.
-		Colour:update()
-		Lumosity:update()
-		Opac:update()
-
-		-- Set our selected primary colour to the primary colour of the colour pallette objects,, if it's different.
-		if selectedColour.primary ~= Colour:getPrimary() then
-			selectedColour.primary = Colour:getPrimary()
-		end
-
-		-- Set our selected primary colour to the secondary colour of the colour pallette objects, if it's different.
-		if selectedColour.secondary ~= Colour:getSecondary() then
-			selectedColour.secondary = Colour:getSecondary()
-		end
+		Hue:update()
+		Sat:update()
+		Val:update()
+		
+		Sat.effect:send("hue", Hue.val)
+		Val.effect:send("hue", Hue.val)
+		Val.effect:send("sat", 1-Sat.val)
+		
+		Alpha.effect:send("hue", Hue.val)
+		Alpha.effect:send("sat", 1-Sat.val)
+		Alpha.effect:send("val", 1-Val.val)
+		Alpha.effect:send("alpha", 1)
+		
+		selectedColour.primary.r, selectedColour.primary.g, selectedColour.primary.b = HSV(Hue.val*255, (1-Sat.val)*255, (1-Val.val)*255)
+		selectedColour.primary.a = 255
 	else
 		-- FBrowser:update()
 	end
@@ -609,7 +632,7 @@ function love.draw()
 	love.graphics.setFont(settings.font)
 
 	-- Draw the background of the application
-	love.graphics.setColor(255, 255, 255, 255)
+	love.graphics.setColor(255, 255, 255)
 	love.graphics.draw(img_background, 0, 0)
 
 	-- Draw the frame viewer
@@ -625,48 +648,31 @@ function love.draw()
 	frames[currentFrame]:draw()
 
 	if page ~= "Import" then
-		-- Draw the main colour picker, and it's frame image.
-		Colour:draw()
-		love.graphics.setColor(255,255,255,255)
-		love.graphics.draw(img_frame_rgb, Colour.x-2, Colour.y-2)
-
-		-- Draw the lumosity slider's picker, and it's frame image.
-		Lumosity:draw()
-		love.graphics.setColor(255,255,255,255)
-		love.graphics.draw(img_frame_lum, Lumosity.x-2, Lumosity.y-2)
-
-		-- Draw the opacity slider's picker, and it's frame image.
-		Opac:draw()
-		love.graphics.setColor(255,255,255,255)
-		love.graphics.draw(img_frame_opa, Opac.x-4, Opac.y-2)
-
-		-- Draw the primary colour display, including the background transparent image, and border.
-		love.graphics.setColor(255, 255, 255, 255)
-		love.graphics.draw(img_transparent_s, 838, 391)
-		love.graphics.setColor(selectedColour.secondary.r, selectedColour.secondary.g, selectedColour.secondary.b, selectedColour.secondary.a)
-		love.graphics.rectangle("fill", 838, 391, 16, 16)
-		love.graphics.setColor(0, 0, 0, 255)
-		love.graphics.rectangle("line", 838, 391, 16, 16)
-
+		-- Draw the colour pickers, and their frame images.
+		Hue:draw()
+		Sat:draw()
+		Val:draw()
+		Alpha:draw()
+		
 		-- Draw the secondary colour display, including the background transparent image, and border.
-		love.graphics.setColor(255, 255, 255, 255)
-		love.graphics.draw(img_transparent_s, 830, 383)
+		--love.graphics.setColor(255, 255, 255)
+		--love.graphics.draw(img_transparent_s, 830, 383)
 		love.graphics.setColor(selectedColour.primary.r, selectedColour.primary.g, selectedColour.primary.b, selectedColour.primary.a)
 		love.graphics.rectangle("fill", 830, 383, 16, 16)
-		love.graphics.setColor(0, 0, 0, 255)
-		love.graphics.rectangle("line", 830, 383, 16, 16)
+		--love.graphics.setColor(0, 0, 0)
+		--love.graphics.rectangle("line", 830, 383, 16, 16)
 	else
 		FBrowser:Draw()
 	end
 
 	-- Draw the background image of the button area.
-	love.graphics.setColor(255, 255, 255, 255)
+	love.graphics.setColor(255, 255, 255)
 	love.graphics.draw(img_buttonarea, 564, 416)
 
 	-- If the page is options then
 	if page == "Options" then
 		-- Draw page title.
-		love.graphics.setColor(95, 95, 95, 255)
+		love.graphics.setColor(95, 95, 95)
 		love.graphics.print("OPTIONS", 685, 425)
 
 		--Draw all buttons on page.
@@ -682,7 +688,7 @@ function love.draw()
 	-- If the page is edit then
 	if page == "Edit" then
 		-- Draw page title.
-		love.graphics.setColor(95, 95, 95, 255)
+		love.graphics.setColor(95, 95, 95)
 		love.graphics.print("EDIT", 695, 425)
 
 		--Draw export, clear and next buttons.
@@ -693,26 +699,26 @@ function love.draw()
 		-- Draw the minus and add buttons for Zoom, as well as printing it's value in the middle.
 		buttons.m_zoom:draw()
 		buttons.a_zoom:draw()
-		love.graphics.setColor(95, 95, 95, 255)
+		love.graphics.setColor(95, 95, 95)
 		love.graphics.print(zoom, 705, 525)
 
 		-- Draw the minus and add buttons for Width as well as printing it's value in the middle.
 		buttons.m_width:draw()
 		buttons.a_width:draw()
-		love.graphics.setColor(95, 95, 95, 255)
+		love.graphics.setColor(95, 95, 95)
 		love.graphics.print(size_x, 705, 557)
 
 		-- Draw the minus and add buttons for Height, as well as printing it's value in the middle.
 		buttons.m_height:draw()
 		buttons.a_height:draw()
-		love.graphics.setColor(95, 95, 95, 255)
+		love.graphics.setColor(95, 95, 95)
 		love.graphics.print(size_y, 705, 590)
 	end
 
 	-- If the page is Animation then
 	if page == "Animation" then
 		-- Draw page title.
-		love.graphics.setColor(95, 95, 95, 255)
+		love.graphics.setColor(95, 95, 95)
 		love.graphics.print("ANIMATION", 680, 425)
 
 		-- Draw all the buttons on the page.
@@ -726,12 +732,12 @@ function love.draw()
 		buttons.onionskin:draw()
 
 		-- Draw the current frame in between the next and previous buttons.
-		love.graphics.setColor(95, 95, 95, 255)
+		love.graphics.setColor(95, 95, 95)
 		love.graphics.print(currentFrame, 705, 462)
 	end
 
 	if page == "Import" then
-		love.graphics.setColor(95, 95, 95, 255)
+		love.graphics.setColor(95, 95, 95)
 		love.graphics.print("IMPORT", 688, 425)
 
 		buttons.prev:draw()
@@ -743,27 +749,27 @@ function love.draw()
 		buttons.frame_m_height:draw()
 		buttons.frame_a_height:draw()
 
-		love.graphics.setColor(95, 95, 95, 255)
+		love.graphics.setColor(95, 95, 95)
 		love.graphics.print("Note: All options are relative to a single frame.", 578, 588)
 		love.graphics.print("Zoom defines the num of pixels a single pixel is.", 574, 603)
 
-		love.graphics.setColor(95, 95, 95, 255)
+		love.graphics.setColor(95, 95, 95)
 		love.graphics.print(import_zoom, 705, 495)
 
-		love.graphics.setColor(95, 95, 95, 255)
+		love.graphics.setColor(95, 95, 95)
 		love.graphics.print(import_width, 705, 525)
 
-		love.graphics.setColor(95, 95, 95, 255)
+		love.graphics.setColor(95, 95, 95)
 		love.graphics.print(import_height, 705, 557)
 
 		if import_width > size_x and import_height > size_y then
-			love.graphics.setColor(255, 95, 95, 255)
+			love.graphics.setColor(255, 95, 95)
 			love.graphics.print("Warning! Canvas too small!", 640, 440)
 		elseif import_width > size_x then
-			love.graphics.setColor(255, 95, 95, 255)
+			love.graphics.setColor(255, 95, 95)
 			love.graphics.print("Warning! Canvas too small, make wider!", 600, 440)
 		elseif import_height > size_y then
-			love.graphics.setColor(255, 95, 95, 255)
+			love.graphics.setColor(255, 95, 95)
 			love.graphics.print("Warning! Canvas too small, make taller!", 600, 440)
 		end
 

@@ -15,15 +15,15 @@ function mouseHover(box1x, box1y, box1w, box1h)
 end
 
 ------------------------------------------------------------
--- Converts HSL to RGB. (input and output range: 0 - 255) -- -- not by me.
+-- Converts HSV to RGB. (input and output range: 0 - 255) -- -- not by me.
 ------------------------------------------------------------
 
-function HSL(h, s, l)
-    if s <= 0 then return l,l,l end
-    h, s, l = h/256*6, s/255, l/255
-    local c = (1-math.abs(2*l-1))*s
-    local x = (1-math.abs(h%2-1))*c
-    local m,r,g,b = (l-.5*c), 0,0,0
+function HSV(h, s, v)
+    if s <= 0 then return v,v,v end
+    h, s, v = h/256*6, s/255, v/255
+    local c = v*s
+    local x = (1-math.abs((h%2)-1))*c
+    local m,r,g,b = (v-c), 0,0,0
     if h < 1     then r,g,b = c,x,0
     elseif h < 2 then r,g,b = x,c,0
     elseif h < 3 then r,g,b = 0,c,x
@@ -32,3 +32,15 @@ function HSL(h, s, l)
     else              r,g,b = c,0,x
     end return (r+m)*255,(g+m)*255,(b+m)*255
 end
+
+--------------------------------------------------------------
+-- Define a HSV function used in shaders                    --
+--------------------------------------------------------------
+
+hsvSnip = "vec3 hsv(float h,float s,float v) { return mix(vec3(1.),clamp((abs(fract(h+vec3(3.,2.,1.)/3.)*6.-3.)-1.),0.,1.),s)*v; }"
+
+--------------------------------------------------------------
+-- Blank image for pixelEffects                             --
+--------------------------------------------------------------
+
+blankImg = love.graphics.newImage(love.image.newImageData(1, 1))
